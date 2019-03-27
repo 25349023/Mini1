@@ -15,7 +15,8 @@ Something like Python
 /*
 the only type: integer
 everything is an expression
-  statement   := END | expr END
+  statement   := END | assignment END
+
   expr        := term expr_tail
   expr_tail   := BITOR term expr_tail | NIL
 
@@ -45,13 +46,16 @@ int sbcount = 0;
 typedef struct _Node {
     char lexeme[MAXLEN];
     TokenSet token;
-    int val;
+    int val, sign;
     struct _Node *left, *right;
 } BTNode;
 
 void statement(void);
 BTNode* expr(void);
 BTNode* term(void);
+BTNode* term2(void);
+BTNode* term3(void);
+BTNode* term4(void);
 BTNode* factor(void);
 int getval(void);
 int setval(char*, int);
@@ -66,7 +70,6 @@ typedef struct {
     int value;
     char type;  // 'l' for left exp, 'r' for right exp, 'a' for left assign, 'm' for root
     int storeInReg;
-
 } RetInfo;
 
 
@@ -75,6 +78,9 @@ int regInUse[8] = {0};
 char regName[8][3] = {"r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7"};
 char memory[100][MAXLEN];
 int currMaxMemIndex = 2;
+
+int idNumCount = 0;
+int reduceCntStack[2048] = {0}, top = -1;
 
 int findIdleReg(){
     for (int i = 0; i < 8; i++){
@@ -105,6 +111,7 @@ BTNode* makeNode(TokenSet tok, const char *lexe)
     strcpy(node->lexeme, lexe);
     node->token= tok;
     node->val = 0;
+    node->sign = 0;
     node->left = NULL;
     node->right = NULL;
     // printf("make node lexe: %s\n", lexe);
@@ -150,7 +157,22 @@ RetInfo evaluateTree(BTNode *root, char mode)
                     int addr = findAddrInMem(root->lexeme) * 4;
                     if (addr < 0){ error(NOTFOUND); }
                     int availReg = findIdleReg();
-                    printf("MOV %s [%d]\n", regName[availReg], addr);
+                    if (1){
+                        // TODO: optimize here
+                        printf("MOV %s [%d]\n", regName[availReg], addr);
+                        if (root->sign){
+                            regInUse[availReg] = 1;
+                            int avl = findIdleReg();
+                            printf("MOV %s 0\n", regName[avl]);
+                            printf("SUB %s %s\n", regName[avl], regName[availReg]);
+                            regInUse[availReg] = 0;
+                            availReg = avl;
+                        }
+                    }
+                    else {
+                        // This will be wrong, why?
+                        printf("MOV %s %d\n", regName[availReg], root->val);
+                    }
                     regInUse[availReg] = 1;
                     finalEvl.storeInReg = availReg;
                 }
@@ -159,7 +181,6 @@ RetInfo evaluateTree(BTNode *root, char mode)
                         currMaxMemIndex++;
                         strcpy(memory[currMaxMemIndex], root->lexeme);
                     }
-                    printf("%s: here\n", root->lexeme);
                 }
                 retval = root->val;
                 break;
@@ -175,6 +196,9 @@ RetInfo evaluateTree(BTNode *root, char mode)
                 break;
             }
             case ASSIGN:
+            case BITAND:
+            case BITXOR:
+            case BITOR:
             case ADDSUB:
             case MULDIV:
                 li = evaluateTree(root->left, root->token == ASSIGN ? 'a' : 'l');
@@ -284,16 +308,16 @@ int setval(char *str, int val)
     }
     return retval;
 }
-// TODO: adjust these
+
 //  expr        := term expr_tail
-//  expr_tail   := ADDSUB term expr_tail | NIL
+//  expr_tail   := BITOR term expr_tail | NIL
 BTNode* expr(void)
 {
     BTNode *retp, *left;
     retp = left = term();
-    while (match(ADDSUB)) {  // tail recursion => while
+    while (match(BITOR)) {  // tail recursion => while
         // printf("expr_tail ");
-        retp = makeNode(ADDSUB, getLexeme());
+        retp = makeNode(BITOR, getLexeme());
         advance();
         retp->right = term();
         retp->left = left;
@@ -302,9 +326,60 @@ BTNode* expr(void)
     return retp;
 }
 
-//  term        := factor term_tail
-//  term_tail   := MULDIV factor term_tail | NIL
+//  term        := term2 term_tail
+//  term_tail   := BITXOR term2 term_tail | NIL
 BTNode* term(void)
+{
+    BTNode *retp, *left;
+    retp = left = term2();
+    while (match(BITXOR)) {  // tail recursion => while
+        // printf("expr_tail ");
+        retp = makeNode(BITXOR, getLexeme());
+        advance();
+        retp->right = term2();
+        retp->left = left;
+        left = retp;
+    }
+    return retp;
+}
+
+//  term2       := term3 term2_tail
+//  term2_tail  := BITAND term3 term2_tail | NIL
+BTNode* term2(void)
+{
+    BTNode *retp, *left;
+    retp = left = term3();
+    while (match(BITAND)) {  // tail recursion => while
+        // printf("expr_tail ");
+        retp = makeNode(BITAND, getLexeme());
+        advance();
+        retp->right = term3();
+        retp->left = left;
+        left = retp;
+    }
+    return retp;
+}
+
+//  term3       := term4 term3_tail
+//  term3_tail  := ADDSUB term4 term3_tail | NIL
+BTNode* term3(void)
+{
+    BTNode *retp, *left;
+    retp = left = term4();
+    while (match(ADDSUB)) {  // tail recursion => while
+        // printf("expr_tail ");
+        retp = makeNode(ADDSUB, getLexeme());
+        advance();
+        retp->right = term4();
+        retp->left = left;
+        left = retp;
+    }
+    return retp;
+}
+
+//term4       := factor term4_tail
+//term4_tail  := MULDIV factor term4_tail | NIL
+BTNode* term4(void)
 {
     BTNode *retp, *left;
     retp = left = factor();
@@ -320,25 +395,27 @@ BTNode* term(void)
 }
 // TODO end here
 
-
 BTNode* factor(void)
 {
     BTNode* retp = NULL;
     char tmpstr[MAXLEN];
 
     if (match(INT)) {
-        // printf("factor Int ");
+        idNumCount++;
         retp =  makeNode(INT, getLexeme());
         retp->val = getval();
         advance();
     } else if (match(ID)) {
-        //printf("factor ID ");
+        idNumCount++;
         BTNode* left = makeNode(ID, getLexeme());
         left->val = getval();
         strcpy(tmpstr, getLexeme());
         advance();
         if (match(ASSIGN)) {
-            // printf("factor ");
+            idNumCount--;
+            if (idNumCount != 0){
+                error(SYNERR);
+            }
             retp = makeNode(ASSIGN, getLexeme());
             advance();
             retp->right = expr();
@@ -347,27 +424,34 @@ BTNode* factor(void)
             retp = left;
         }
     } else if (match(ADDSUB)) {
+        idNumCount++;
         strcpy(tmpstr, getLexeme());
         advance();
         if (match(ID) || match(INT)) {
-            // printf("factor ");
-            retp = makeNode(ADDSUB, tmpstr);
-            if (match(ID))
-                retp->right = makeNode(ID, getLexeme());
-            else
-                retp->right = makeNode(INT, getLexeme());
-            retp->right->val = getval();
-            // printf("factor ");
-            retp->left = makeNode(INT, "0");
-            retp->left->val = 0;
+            if (match(ID)){
+                retp = makeNode(ID, getLexeme());
+            }
+            else {
+                retp = makeNode(INT, getLexeme());
+            }
+            if (strcmp(tmpstr, "+") == 0){
+                retp->val = getval();
+            }
+            else {
+                retp->sign = 1;
+                retp->val = -getval();
+            }
             advance();
         } else {
             error(NOTNUMID);
         }
     } else if (match(LPAREN)) {
+        reduceCntStack[++top] = idNumCount;
+        idNumCount = 0;
         advance();
         retp = expr();
         if (match(RPAREN)) {
+            idNumCount += reduceCntStack[top--];
             advance();
         } else {
             error(MISPAREN);
@@ -420,7 +504,7 @@ void statement(void)
     BTNode* retp;
     // printf("statement\n");
     if (match(END)) {
-        printf(">> ");
+        // printf(">> ");
         advance();
     }
     else if (match(FIN)){
@@ -431,10 +515,10 @@ void statement(void)
             printf("%d\n", evaluateTree(retp, 'm').value);
             // printPrefix(retp);
             // printf("\n");
-            // evaluateTree(retp, 'm');
+            //evaluateTree(retp, 'm');
             freeTree(retp);
 
-            printf(">> ");
+            // printf(">> ");
             advance();
         }
         else {
@@ -450,10 +534,13 @@ int main()
     strcpy(memory[1], "y");
     strcpy(memory[2], "z");
 
-    // freopen("test.txt", "r", stdin);
+    //freopen("..\\test.txt", "w", stdout);
+    //freopen("..\\testcase\\15.in", "r", stdin);
 
-    printf(">> ");
+    // printf(">> ");
     while (1) {
+        idNumCount = 0;
+        top = -1;
         statement();
     }
     printf("EXIT 0\n");

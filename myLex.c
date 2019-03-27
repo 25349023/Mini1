@@ -32,10 +32,18 @@ TokenSet getToken(void)
         lexeme[0] = c;
         lexeme[1] = '\0';
         return ADDSUB;
-    } else if (c == '&' || c == '|' || c == '^') {
+    } else if (c == '&') {
         lexeme[0] = c;
         lexeme[1] = '\0';
-        return ADDSUB;
+        return BITAND;
+    } else if (c == '^') {
+        lexeme[0] = c;
+        lexeme[1] = '\0';
+        return BITXOR;
+    } else if (c == '|') {
+        lexeme[0] = c;
+        lexeme[1] = '\0';
+        return BITOR;
     } else if (c == '*' || c == '/') {
         lexeme[0] = c;
         lexeme[1] = '\0';
