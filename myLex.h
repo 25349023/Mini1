@@ -3,10 +3,9 @@
 #define MAXLEN 256
 
 typedef enum {UNKNOWN, END, INT, ID, ADDSUB, MULDIV, ASSIGN,
-    LPAREN, RPAREN, BITWISE, FIN} TokenSet;
+    LPAREN, RPAREN, BITAND, BITXOR, BITOR, FIN} TokenSet;
 
 extern int match (TokenSet token);
-extern int lkahead();
 extern void advance(void);
 extern char* getLexeme(void);
 

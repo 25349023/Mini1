@@ -74,10 +74,6 @@ void advance(void)
     lookahead = getToken();
 }
 
-int lkahead(){
-    return lookahead;
-}
-
 int match(TokenSet token)
 {
     if (lookahead == UNKNOWN) advance();

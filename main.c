@@ -17,9 +17,20 @@ the only type: integer
 everything is an expression
   statement   := END | expr END
   expr        := term expr_tail
-  expr_tail   := ADDSUB term expr_tail | NIL
-  term        := factor term_tail
-  term_tail   := MULDIV factor term_tail | NIL
+  expr_tail   := BITOR term expr_tail | NIL
+
+  term        := term2 term_tail
+  term_tail   := BITXOR term2 term_tail | NIL
+
+  term2       := term3 term2_tail
+  term2_tail  := BITAND term3 term2_tail | NIL
+
+  term3       := term4 term3_tail
+  term3_tail  := ADDSUB term4 term3_tail | NIL
+
+  term4       := factor term4_tail
+  term4_tail  := MULDIV factor term4_tail | NIL
+
   factor      := INT | ADDSUB INT | ADDSUB ID | ID ASSIGN expr | ID | LPAREN expr RPAREN
 */
 
@@ -273,7 +284,7 @@ int setval(char *str, int val)
     }
     return retval;
 }
-
+// TODO: adjust these
 //  expr        := term expr_tail
 //  expr_tail   := ADDSUB term expr_tail | NIL
 BTNode* expr(void)
@@ -307,6 +318,8 @@ BTNode* term(void)
     }
     return retp;
 }
+// TODO end here
+
 
 BTNode* factor(void)
 {
