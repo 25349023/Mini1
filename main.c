@@ -79,6 +79,9 @@ char regName[8][3] = {"r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7"};
 char memory[100][MAXLEN];
 int currMaxMemIndex = 2;
 
+int usedMemInCurStat = 0;
+int relativeToXYZ[100] = {0};
+
 int idNumCount = 0;
 int reduceCntStack[2048] = {0}, top = -1;
 
@@ -157,8 +160,8 @@ RetInfo evaluateTree(BTNode *root, char mode)
                     int addr = findAddrInMem(root->lexeme) * 4;
                     if (addr < 0){ error(NOTFOUND); }
                     int availReg = findIdleReg();
-                    if (1){
-                        // TODO: optimize here
+                    if (addr <= 8 || relativeToXYZ[addr / 4]){
+                        usedMemInCurStat = 1;
                         printf("MOV %s [%d]\n", regName[availReg], addr);
                         if (root->sign){
                             regInUse[availReg] = 1;
@@ -170,7 +173,6 @@ RetInfo evaluateTree(BTNode *root, char mode)
                         }
                     }
                     else {
-                        // This will be wrong, why?
                         printf("MOV %s %d\n", regName[availReg], root->val);
                     }
                     regInUse[availReg] = 1;
@@ -229,6 +231,9 @@ RetInfo evaluateTree(BTNode *root, char mode)
                     retval = setval(root->left->lexeme, rv);
                     int addr = findAddrInMem(root->left->lexeme) * 4;
                     printf("MOV [%d] %s\n", addr, regName[ri.storeInReg]);
+                    if (usedMemInCurStat){
+                        relativeToXYZ[addr / 4] = 1;
+                    }
                 }
                 else if (strcmp(root->lexeme, "&") == 0){
                     printf("AND %s %s\n", regName[li.storeInReg], regName[ri.storeInReg]);
@@ -393,7 +398,6 @@ BTNode* term4(void)
     }
     return retp;
 }
-// TODO end here
 
 BTNode* factor(void)
 {
@@ -541,6 +545,7 @@ int main()
     while (1) {
         idNumCount = 0;
         top = -1;
+        usedMemInCurStat = 0;
         statement();
     }
     printf("EXIT 0\n");
