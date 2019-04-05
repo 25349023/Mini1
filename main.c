@@ -15,7 +15,7 @@ Something like Python
 /*
 the only type: integer
 everything is an expression
-  statement   := END | assignment END
+  statement   := END | expr END
 
   expr        := term expr_tail
   expr_tail   := BITOR term expr_tail | NIL
@@ -73,7 +73,7 @@ typedef struct {
 } RetInfo;
 
 
-int reg[8] = {0};
+char regContent[8][MAXLEN];
 int regInUse[8] = {0};
 char regName[8][3] = {"r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7"};
 char memory[100][MAXLEN];
@@ -103,9 +103,18 @@ int findAddrInMem(const char *name){
     return -1;
 }
 
+int findVarInReg(const char *name){
+    for (int i = 0; i < 8; i++){
+        if (strcmp(name, regContent[i]) == 0){
+            return i;
+        }
+    }
+    return -1;
+}
 
-/// my code end
+
 /// ::
+/// my code end
 
 /* create a node without any child */
 BTNode* makeNode(TokenSet tok, const char *lexe)
@@ -160,20 +169,34 @@ RetInfo evaluateTree(BTNode *root, char mode)
                     int addr = findAddrInMem(root->lexeme) * 4;
                     if (addr < 0){ error(NOTFOUND); }
                     int availReg = findIdleReg();
+                    int posInReg = findVarInReg(root->lexeme);
                     if (addr <= 8 || relativeToXYZ[addr / 4]){
                         usedMemInCurStat = 1;
-                        printf("MOV %s [%d]\n", regName[availReg], addr);
+                        if (posInReg == -1){
+                            printf("MOV %s [%d]\n", regName[availReg], addr);
+                            strcpy(regContent[availReg], root->lexeme);
+                        }
+                        else {
+                            availReg = posInReg;
+                        }
                         if (root->sign){
                             regInUse[availReg] = 1;
                             int avl = findIdleReg();
                             printf("MOV %s 0\n", regName[avl]);
+                            strcpy(regContent[avl], "###");
                             printf("SUB %s %s\n", regName[avl], regName[availReg]);
                             regInUse[availReg] = 0;
                             availReg = avl;
                         }
                     }
                     else {
-                        printf("MOV %s %d\n", regName[availReg], root->val);
+                        if (posInReg == -1){
+                            printf("MOV %s %d\n", regName[availReg], root->val);
+                            strcpy(regContent[availReg], root->lexeme);
+                        }
+                        else {
+                            availReg = posInReg;
+                        }
                     }
                     regInUse[availReg] = 1;
                     finalEvl.storeInReg = availReg;
@@ -191,6 +214,7 @@ RetInfo evaluateTree(BTNode *root, char mode)
                 if (mode != 'm'){
                     int availReg = findIdleReg();
                     printf("MOV %s %d\n", regName[availReg], root->val);
+                    strcpy(regContent[availReg], "###");
                     regInUse[availReg] = 1;
                     finalEvl.storeInReg = availReg;
                 }
@@ -209,14 +233,17 @@ RetInfo evaluateTree(BTNode *root, char mode)
                 rv = ri.value;
                 if (strcmp(root->lexeme, "+") == 0){
                     printf("ADD %s %s\n", regName[li.storeInReg], regName[ri.storeInReg]);
+                    strcpy(regContent[li.storeInReg], "###");
                     retval = lv + rv;
                 }
                 else if (strcmp(root->lexeme, "-") == 0){
                     printf("SUB %s %s\n", regName[li.storeInReg], regName[ri.storeInReg]);
+                    strcpy(regContent[li.storeInReg], "###");
                     retval = lv - rv;
                 }
                 else if (strcmp(root->lexeme, "*") == 0){
                     printf("MUL %s %s\n", regName[li.storeInReg], regName[ri.storeInReg]);
+                    strcpy(regContent[li.storeInReg], "###");
                     retval = lv * rv;
                 }
                 else if (strcmp(root->lexeme, "/") == 0) {
@@ -225,6 +252,7 @@ RetInfo evaluateTree(BTNode *root, char mode)
                     }
                     else {
                         printf("DIV %s %s\n", regName[li.storeInReg], regName[ri.storeInReg]);
+                        strcpy(regContent[li.storeInReg], "###");
                         retval = lv / rv;
                     }
                 } else if (strcmp(root->lexeme, "=") == 0){
@@ -237,14 +265,17 @@ RetInfo evaluateTree(BTNode *root, char mode)
                 }
                 else if (strcmp(root->lexeme, "&") == 0){
                     printf("AND %s %s\n", regName[li.storeInReg], regName[ri.storeInReg]);
+                    strcpy(regContent[li.storeInReg], "###");
                     retval = lv & rv;
                 }
                 else if (strcmp(root->lexeme, "|") == 0){
                     printf("OR %s %s\n", regName[li.storeInReg], regName[ri.storeInReg]);
+                    strcpy(regContent[li.storeInReg], "###");
                     retval = lv | rv;
                 }
                 else if (strcmp(root->lexeme, "^") == 0){
                     printf("XOR %s %s\n", regName[li.storeInReg], regName[ri.storeInReg]);
+                    strcpy(regContent[li.storeInReg], "###");
                     retval = lv ^ rv;
                 }
                 finalEvl.storeInReg = li.type != 'a'? li.storeInReg : ri.storeInReg;
@@ -546,6 +577,10 @@ int main()
         idNumCount = 0;
         top = -1;
         usedMemInCurStat = 0;
+        for (int i = 0; i < 8; i++){
+            strcpy(regContent[i], "###");
+        }
+
         statement();
     }
     printf("EXIT 0\n");
