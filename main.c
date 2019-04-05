@@ -87,6 +87,11 @@ int reduceCntStack[2048] = {0}, top = -1;
 
 int findIdleReg(){
     for (int i = 0; i < 8; i++){
+        if (!regInUse[i] && strcmp(regContent[i], "###") == 0){
+            return i;
+        }
+    }
+    for (int i = 0; i < 8; i++){
         if (!regInUse[i]){
             return i;
         }
@@ -172,7 +177,7 @@ RetInfo evaluateTree(BTNode *root, char mode)
                     int posInReg = findVarInReg(root->lexeme);
                     if (addr <= 8 || relativeToXYZ[addr / 4]){
                         usedMemInCurStat = 1;
-                        if (posInReg == -1){
+                        if (posInReg == -1 || regInUse[posInReg]){
                             printf("MOV %s [%d]\n", regName[availReg], addr);
                             strcpy(regContent[availReg], root->lexeme);
                         }
@@ -190,7 +195,7 @@ RetInfo evaluateTree(BTNode *root, char mode)
                         }
                     }
                     else {
-                        if (posInReg == -1){
+                        if (posInReg == -1 || regInUse[posInReg]){
                             printf("MOV %s %d\n", regName[availReg], root->val);
                             strcpy(regContent[availReg], root->lexeme);
                         }
