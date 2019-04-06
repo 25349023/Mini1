@@ -80,10 +80,12 @@ char memory[100][MAXLEN];
 int currMaxMemIndex = 2;
 
 int usedMemInCurStat = 0;
-int relativeToXYZ[100] = {0};
+int volatileMem[100] = {0};
 
 int idNumCount = 0;
 int reduceCntStack[2048] = {0}, top = -1;
+
+int assignAppeared = 0;
 
 int findIdleReg(){
     for (int i = 0; i < 8; i++){
@@ -175,7 +177,7 @@ RetInfo evaluateTree(BTNode *root, char mode)
                     if (addr < 0){ error(NOTFOUND); }
                     int availReg = findIdleReg();
                     int posInReg = findVarInReg(root->lexeme);
-                    if (addr <= 8 || relativeToXYZ[addr / 4]){
+                    if (volatileMem[addr / 4]){
                         usedMemInCurStat = 1;
                         if (posInReg == -1 || regInUse[posInReg]){
                             printf("MOV %s [%d]\n", regName[availReg], addr);
@@ -232,7 +234,7 @@ RetInfo evaluateTree(BTNode *root, char mode)
             case BITOR:
             case ADDSUB:
             case MULDIV:
-                li = evaluateTree(root->left, root->token == ASSIGN ? 'a' : 'l');
+                li = evaluateTree(root->left, (char) (root->token == ASSIGN ? 'a' : 'l'));
                 ri = evaluateTree(root->right, 'r');
                 lv = li.value;
                 rv = ri.value;
@@ -252,20 +254,25 @@ RetInfo evaluateTree(BTNode *root, char mode)
                     retval = lv * rv;
                 }
                 else if (strcmp(root->lexeme, "/") == 0) {
-                    if (rv==0){
+                    if (rv == 0 && !volatileMem[findAddrInMem(root->right->lexeme)]){
                         error(NAN);
                     }
                     else {
                         printf("DIV %s %s\n", regName[li.storeInReg], regName[ri.storeInReg]);
                         strcpy(regContent[li.storeInReg], "###");
-                        retval = lv / rv;
+                        if (rv != 0){
+                            retval = lv / rv;
+                        }
+                        else {
+                            retval = lv;  // trivial
+                        }
                     }
                 } else if (strcmp(root->lexeme, "=") == 0){
                     retval = setval(root->left->lexeme, rv);
                     int addr = findAddrInMem(root->left->lexeme) * 4;
                     printf("MOV [%d] %s\n", addr, regName[ri.storeInReg]);
                     if (usedMemInCurStat){
-                        relativeToXYZ[addr / 4] = 1;
+                        volatileMem[addr / 4] = 1;
                     }
                 }
                 else if (strcmp(root->lexeme, "&") == 0){
@@ -429,6 +436,11 @@ BTNode* term4(void)
         retp = makeNode(MULDIV, getLexeme());
         advance();
         retp->right = factor();
+        if (strcmp(retp->lexeme, "/") == 0 && retp->right->val == 0){
+            if (retp->right->token == INT){
+                error(NAN);
+            }
+        }
         retp->left = left;
         left = retp;
     }
@@ -456,6 +468,7 @@ BTNode* factor(void)
             if (idNumCount != 0){
                 error(SYNERR);
             }
+            assignAppeared = 1;
             retp = makeNode(ASSIGN, getLexeme());
             advance();
             retp->right = expr();
@@ -551,11 +564,14 @@ void statement(void)
         error(FINISH);
     } else {
         retp = expr();
+        if (!assignAppeared){
+            error(SYNERR);
+        }
         if (match(END)) {
             printf("%d\n", evaluateTree(retp, 'm').value);
             // printPrefix(retp);
             // printf("\n");
-            //evaluateTree(retp, 'm');
+            // evaluateTree(retp, 'm');
             freeTree(retp);
 
             // printf(">> ");
@@ -573,6 +589,9 @@ int main()
     strcpy(memory[0], "x");
     strcpy(memory[1], "y");
     strcpy(memory[2], "z");
+    volatileMem[0] = 1;
+    volatileMem[1] = 1;
+    volatileMem[2] = 1;
 
     //freopen("..\\test.txt", "w", stdout);
     //freopen("..\\testcase\\15.in", "r", stdin);
@@ -582,6 +601,7 @@ int main()
         idNumCount = 0;
         top = -1;
         usedMemInCurStat = 0;
+        assignAppeared = 0;
         for (int i = 0; i < 8; i++){
             strcpy(regContent[i], "###");
         }
@@ -592,15 +612,3 @@ int main()
     return 0;
 }
 
-/*
-int main(void)
-{
-    TokenSet tok;
-    tok = getToken();
-    while (tok != END) {
-        printf("%d: %s\n", tok, getLexeme());
-        tok = getToken();
-    }
-    return 0;
-}
-*/
